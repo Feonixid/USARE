@@ -114,6 +114,8 @@ def parse_args():
                     help="Banner grab delay (default: 600s)")
     rc.add_argument("--dns", action="store_true",
                     help="DNS reconnaissance")
+    rc.add_argument("--doh", action="store_true",
+                    help="DNS-over-HTTPS resolution (tunnels DNS lookups via Cloudflare/Google/Quad9)")
     rc.add_argument("--traceroute", action="store_true",
                     help="TCP SYN stealth traceroute")
     rc.add_argument("--ack", action="store_true",
@@ -450,6 +452,10 @@ def parse_args():
                      help="Export results as OASIS SARIF 2.1.0 JSON format (GitHub Security / SIEM)")
     adv.add_argument("--stix-export", action="store_true",
                      help="Export results as OASIS STIX 2.1 JSON bundle (OpenCTI / MISP / Threat Intel)")
+    adv.add_argument("--cyclonedx-export", "--sbom-export", action="store_true", dest="cyclonedx_export",
+                     help="Export results as OWASP CycloneDX 1.5 JSON SBOM (DevSecOps / Asset inventory)")
+    adv.add_argument("--resume", metavar="SESSION_FILE", nargs="?", const=".usare_session",
+                     help="Resume interrupted scan from encrypted session checkpoint (default: .usare_session)")
 
     # ── OPEN_FILTERED second-pass ─────────────────────────────────────────────
     adv.add_argument("--verify-filtered", action="store_true",

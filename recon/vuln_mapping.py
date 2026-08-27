@@ -308,6 +308,53 @@ class VulnerabilityMapper:
                 })
 
             if cves:
+                # Enrich with EPSS scores
+                cve_ids_to_enrich = [c["cve_id"] for c in cves if c.get("cve_id", "").startswith("CVE-")]
+                if cve_ids_to_enrich:
+                    epss_map = fetch_epss_scores(cve_ids_to_enrich)
+                    for c in cves:
+                        cid = c.get("cve_id", "")
+                        if cid in epss_map:
+                            c["epss_score"] = epss_map[cid]["epss"]
+                            c["epss_percentile"] = epss_map[cid]["percentile"]
+                        else:
+                            c["epss_score"] = 0.0
+                            c["epss_percentile"] = 0.0
                 vuln_results[port] = cves
 
         return vuln_results
+
+
+EPSS_API_URL = "https://api.first.org/data/v1/epss"
+_EPSS_CACHE: Dict[str, Dict[str, float]] = {}
+
+
+def fetch_epss_scores(cve_ids: List[str], timeout: float = 8.0) -> Dict[str, Dict[str, float]]:
+    """
+    Query FIRST.org EPSS API for exploit probability and percentile ranking.
+    Returns: {cve_id: {"epss": float, "percentile": float}}
+    """
+    global _EPSS_CACHE
+    to_fetch = [c for c in cve_ids if c.startswith("CVE-") and c not in _EPSS_CACHE]
+    if not to_fetch:
+        return {c: _EPSS_CACHE[c] for c in cve_ids if c in _EPSS_CACHE}
+
+    # Batch queries up to 50 CVEs per request
+    for i in range(0, len(to_fetch), 50):
+        batch = to_fetch[i:i + 50]
+        try:
+            url = f"{EPSS_API_URL}?cve={','.join(batch)}"
+            resp = requests.get(url, timeout=timeout)
+            if resp.status_code == 200:
+                data = resp.json()
+                for item in data.get("data", []):
+                    c_id = item.get("cve")
+                    epss_val = float(item.get("epss", 0.0) or 0.0)
+                    pct_val = float(item.get("percentile", 0.0) or 0.0)
+                    if c_id:
+                        _EPSS_CACHE[c_id] = {"epss": epss_val, "percentile": pct_val}
+        except Exception as e:
+            logger.debug(f"[vuln] EPSS query failed: {e}")
+
+    return {c: _EPSS_CACHE[c] for c in cve_ids if c in _EPSS_CACHE}
+

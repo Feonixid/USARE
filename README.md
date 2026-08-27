@@ -97,23 +97,47 @@ python usare.py -t 192.168.1.100 \
 
 # Multi-path proxy dispersion
 python usare.py -t 192.168.1.100 \
-  --multi-path proxies.json
-
 # Protocol tunneling (HTTPS cover traffic with JA3 rotation)
 python usare.py -t 192.168.1.100 \
   --tunnel https \
   --ja3-rotation chrome \
   --entropy-balance chrome_tls
+
+# Covert DNS-over-HTTPS resolution with DNSSEC validation
+python usare.py -t 192.168.1.100 --dns --doh
+
+# Encrypted session checkpoint & resume
+python usare.py -t 192.168.1.100 --resume .usare_session
+
+# Compliance, SIEM, and SBOM reporting
+python usare.py -t 192.168.1.100 --full \
+  --sarif-export \
+  --stix-export \
+  --cyclonedx-export
 ```
+
+---
+
+## 📊 Standards & Export Formats
+
+USARE natively exports structured diagnostic and audit intelligence into industry-standard formats:
+
+| Format | Standard | CLI Flag | Target Consumers |
+| :--- | :--- | :--- | :--- |
+| **SARIF 2.1.0** | OASIS Static Analysis Results | `--sarif-export` | GitHub Code Scanning, Azure DevOps, CI/CD |
+| **STIX 2.1** | OASIS Structured Threat Information | `--stix-export` | OpenCTI, MISP, AlienVault OTX, Enterprise SIEM |
+| **CycloneDX 1.5** | OWASP Software Bill of Materials | `--cyclonedx-export` | Dependency-Track, DefectDojo, Snyk, DevSecOps |
+| **Nessus XML** | Tenable Nessus v2 XML | `--nessus-export` | Tenable.io, Nessus Professional |
+| **Metasploit XML** | Metasploit db_import XML | `--msf-export` | Metasploit Pro / Community Framework |
 
 ---
 
 ## 🧪 Testing
 
-USARE includes a comprehensive pytest suite covering encryption, packet engine crafting, port shuffling, timing algorithms, strategy controller state transitions, interference detection, and multi-path dispersion:
+USARE includes a comprehensive pytest suite with 109 automated tests covering raw packet crafting, timing jitter, strategy control, eBPF/firewall RST suppression, EPSS scoring, DNSSEC audits, and SBOM validation:
 
 ```bash
-# Run all unit tests
+# Run full unit test suite
 pytest
 ```
 

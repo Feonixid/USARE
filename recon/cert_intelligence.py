@@ -18,7 +18,7 @@ import hashlib
 import ssl
 import socket
 import requests
-from typing import List, Dict, Optional, Set, Tuple
+from typing import List, Dict, Optional, Set, Tuple, Any
 from dataclasses import dataclass, field
 from urllib.parse import quote
 import logging
@@ -391,7 +391,7 @@ class CertificateIntelligenceAnalyzer:
         )
 
 # Integration function for existing scanner
-def analyze_certificate_intelligence(target: str, port: int = 443) -> Optional[Dict[str, any]]:
+def analyze_certificate_intelligence(target: str, port: int = 443) -> Optional[Dict[str, Any]]:
     """Analyze certificate intelligence and return results as dict."""
     try:
         analyzer = CertificateIntelligenceAnalyzer()
@@ -408,3 +408,80 @@ def analyze_certificate_intelligence(target: str, port: int = 443) -> Optional[D
     except Exception as e:
         logger.error(f"[USARE] Certificate intelligence analysis failed: {e}")
         return None
+
+
+def assess_tls_posture(target: str, port: int = 443, timeout: float = 4.0) -> Dict[str, Any]:
+    """
+    Assess TLS cryptographic posture: checks for deprecated TLS 1.0/1.1 protocols,
+    modern TLS 1.3 support, and forward secrecy capabilities.
+    """
+    results: Dict[str, Any] = {
+        "target": target,
+        "port": port,
+        "tls13_supported": False,
+        "tls12_supported": False,
+        "deprecated_protocols": [],
+        "post_quantum_ready": False,
+        "grade": "C",
+        "warnings": [],
+    }
+
+    # Test TLS 1.3
+    try:
+        ctx13 = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx13.check_hostname = False
+        ctx13.verify_mode = ssl.CERT_NONE
+        ctx13.minimum_version = ssl.TLSVersion.TLSv1_3
+        with socket.create_connection((target, port), timeout=timeout) as sock:
+            with ctx13.wrap_socket(sock, server_hostname=target) as ssock:
+                results["tls13_supported"] = True
+                cipher = ssock.cipher()
+                if cipher:
+                    results["active_cipher"] = cipher[0]
+                # Check for post-quantum hybrid KEMs in ALPN/ciphers
+                if "kyber" in str(cipher).lower() or "mlkem" in str(cipher).lower():
+                    results["post_quantum_ready"] = True
+    except Exception:
+        results["tls13_supported"] = False
+
+    # Test TLS 1.2
+    try:
+        ctx12 = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx12.check_hostname = False
+        ctx12.verify_mode = ssl.CERT_NONE
+        ctx12.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx12.maximum_version = ssl.TLSVersion.TLSv1_2
+        with socket.create_connection((target, port), timeout=timeout) as sock:
+            with ctx12.wrap_socket(sock, server_hostname=target) as ssock:
+                results["tls12_supported"] = True
+    except Exception:
+        results["tls12_supported"] = False
+
+    # Test Deprecated TLS 1.0/1.1 if supported by Python runtime
+    for ver_name, ver_enum in [("TLSv1.0", getattr(ssl.TLSVersion, "TLSv1", None)),
+                               ("TLSv1.1", getattr(ssl.TLSVersion, "TLSv1_1", None))]:
+        if ver_enum is not None:
+            try:
+                ctx_dep = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                ctx_dep.check_hostname = False
+                ctx_dep.verify_mode = ssl.CERT_NONE
+                ctx_dep.minimum_version = ver_enum
+                ctx_dep.maximum_version = ver_enum
+                with socket.create_connection((target, port), timeout=timeout) as sock:
+                    with ctx_dep.wrap_socket(sock, server_hostname=target):
+                        results["deprecated_protocols"].append(ver_name)
+                        results["warnings"].append(f"Insecure deprecated protocol accepted: {ver_name}")
+            except Exception:
+                pass
+
+    # Assign overall TLS posture grade
+    if results["deprecated_protocols"]:
+        results["grade"] = "F"
+    elif results["tls13_supported"]:
+        results["grade"] = "A+" if results.get("post_quantum_ready") else "A"
+    elif results["tls12_supported"]:
+        results["grade"] = "B"
+    else:
+        results["grade"] = "Unknown"
+
+    return results

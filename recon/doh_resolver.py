@@ -48,6 +48,9 @@ RECORD_TYPES = {
     "CNAME": 5,
     "SOA": 6,
     "PTR": 12,
+    "DS": 43,
+    "DNSKEY": 48,
+    "RRSIG": 46,
 }
 
 
@@ -75,6 +78,7 @@ class DoHResult:
     records: List[DoHRecord] = field(default_factory=list)
     provider_used: str = ""
     status: int = -1       # DNS RCODE
+    authenticated_data: bool = False  # DNSSEC AD bit
     error: Optional[str] = None
     query_time_ms: float = 0.0
 
@@ -84,6 +88,7 @@ class DoHResult:
             "records": [r.to_dict() for r in self.records],
             "provider": self.provider_used,
             "status": self.status,
+            "authenticated_data": self.authenticated_data,
             "error": self.error,
             "query_time_ms": round(self.query_time_ms, 2),
         }
@@ -130,7 +135,7 @@ class DoHResolver:
         result = DoHResult(domain=domain, provider_used=provider["name"])
         type_code = RECORD_TYPES.get(rtype.upper(), 1)
 
-        url = f"{provider['url']}?name={domain}&type={rtype.upper()}"
+        url = f"{provider['url']}?name={domain}&type={rtype.upper()}&do=1"
         headers = dict(provider["headers"])
         # Add a browser-like User-Agent to blend with normal traffic
         headers["User-Agent"] = random.choice([
@@ -148,6 +153,7 @@ class DoHResolver:
 
             result.query_time_ms = (time.monotonic() - start) * 1000
             result.status = data.get("Status", -1)
+            result.authenticated_data = bool(data.get("AD", False))
 
             for answer in data.get("Answer", []):
                 record = DoHRecord(
@@ -240,3 +246,40 @@ class DoHResolver:
             results[domain] = self.resolve(domain, rtype)
             time.sleep(random.uniform(*delay_range))
         return results
+
+    def audit_dnssec(self, domain: str) -> Dict[str, Any]:
+        """
+        Audit DNSSEC posture and chain-of-trust indicators for a domain.
+        Evaluates DS, DNSKEY, RRSIG records and Authenticated Data (AD) status.
+        """
+        res_a = self.resolve(domain, "A")
+        res_ds = self.resolve(domain, "DS")
+        res_key = self.resolve(domain, "DNSKEY")
+
+        has_ds = len(res_ds.records) > 0
+        has_key = len(res_key.records) > 0
+        is_ad = res_a.authenticated_data
+
+        if is_ad:
+            status = "SECURE"
+            details = "DNSSEC signature validated by upstream resolver (AD bit set)"
+        elif has_ds and has_key:
+            status = "CONFIGURED"
+            details = "DNSKEY and DS records present; signatures present in zone"
+        elif has_ds or has_key:
+            status = "PARTIAL"
+            details = "Partial DNSSEC records configured (missing complete delegation chain)"
+        else:
+            status = "INSECURE"
+            details = "No DNSSEC records (DS/DNSKEY) found; zone is unsigned"
+
+        return {
+            "domain": domain,
+            "dnssec_status": status,
+            "authenticated_data": is_ad,
+            "has_ds_record": has_ds,
+            "has_dnskey_record": has_key,
+            "ds_records": [r.to_dict() for r in res_ds.records],
+            "dnskey_records": [r.to_dict() for r in res_key.records],
+            "details": details,
+        }

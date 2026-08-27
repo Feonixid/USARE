@@ -495,3 +495,100 @@ def export_stix(
         json.dump(bundle, f, indent=2)
     logger.info("[export] STIX 2.1 bundle written: %s", filename)
     return filename
+
+
+def export_cyclonedx(
+    all_data: Dict[str, Any],
+    filename: str = "logs/usare_report.cdx.json",
+) -> str:
+    """
+    Export USARE scan results to OWASP CycloneDX 1.5 JSON SBOM format
+    for DevSecOps asset management and supply chain security tools.
+    """
+    import json
+    import uuid
+    os.makedirs(os.path.dirname(filename) or ".", exist_ok=True)
+    target = all_data.get("target") or all_data.get("target_ip") or "127.0.0.1"
+    now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    components: List[Dict[str, Any]] = []
+    vulnerabilities: List[Dict[str, Any]] = []
+
+    # Map discovered services/banners as CycloneDX components
+    banners = all_data.get("banners", {}) or {}
+    open_ports = all_data.get("open_ports", []) or []
+
+    for port in open_ports:
+        b_info = banners.get(port) or banners.get(str(port)) or {}
+        srv_name = b_info.get("service") or b_info.get("name") or f"service-{port}"
+        srv_version = b_info.get("version") or "unknown"
+        bom_ref = f"component-{target}-{port}"
+
+        comp_entry: Dict[str, Any] = {
+            "type": "service",
+            "bom-ref": bom_ref,
+            "name": srv_name,
+            "version": srv_version,
+            "properties": [
+                {"name": "network:target", "value": target},
+                {"name": "network:port", "value": str(port)},
+                {"name": "network:transport", "value": "tcp"}
+            ]
+        }
+        if b_info.get("cpe"):
+            comp_entry["cpe"] = b_info["cpe"]
+        components.append(comp_entry)
+
+    # Map CVE vulnerabilities to CycloneDX vulnerability objects
+    vulns = all_data.get("vulnerabilities", {}) or {}
+    for port_str, cve_list in vulns.items():
+        bom_ref = f"component-{target}-{port_str}"
+        for cve in cve_list:
+            cve_id = cve.get("cve_id", "CVE-UNKNOWN")
+            score = float(cve.get("cvss_score", 0.0) or 0.0)
+            severity = "critical" if score >= 9.0 else "high" if score >= 7.0 else "medium" if score >= 4.0 else "low"
+
+            vuln_obj: Dict[str, Any] = {
+                "id": cve_id,
+                "source": {"name": "NVD", "url": f"https://nvd.nist.gov/vuln/detail/{cve_id}"},
+                "ratings": [{
+                    "score": score,
+                    "severity": severity,
+                    "method": "CVSSv31"
+                }],
+                "description": cve.get("description", ""),
+                "affects": [{"ref": bom_ref}]
+            }
+            if cve.get("epss_score") is not None:
+                vuln_obj["properties"] = [
+                    {"name": "epss:score", "value": str(cve.get("epss_score", 0.0))},
+                    {"name": "epss:percentile", "value": str(cve.get("epss_percentile", 0.0))}
+                ]
+            vulnerabilities.append(vuln_obj)
+
+    cdx_doc = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "serialNumber": f"urn:uuid:{uuid.uuid4()}",
+        "version": 1,
+        "metadata": {
+            "timestamp": now_str,
+            "tools": [{
+                "vendor": "USARE",
+                "name": "USARE Recon Engine",
+                "version": "2.1.0"
+            }],
+            "component": {
+                "type": "device",
+                "name": target,
+                "description": f"Audited network target: {target}"
+            }
+        },
+        "components": components,
+        "vulnerabilities": vulnerabilities
+    }
+
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(cdx_doc, f, indent=2)
+    logger.info("[export] CycloneDX 1.5 SBOM written: %s", filename)
+    return filename

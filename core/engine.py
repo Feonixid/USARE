@@ -3566,6 +3566,18 @@ def main():
                 console.print(f"  [red]✗[/red] STIX export failed: {e}")
             console.print()
 
+        if getattr(args, "cyclonedx_export", False):
+            console.print("[bold cyan]📦 OWASP CycloneDX 1.5 SBOM Export[/bold cyan]")
+            try:
+                from ops.export_formats import export_cyclonedx  # type: ignore
+                _cdx_target = getattr(args, "target", "scan")
+                _cdx_fn = os.path.join(_exp_dir, f"usare_{_cdx_target.replace('.', '_')}.cdx.json")
+                _cdx_path = export_cyclonedx(save_data, filename=_cdx_fn)
+                console.print(f"  [green]✓[/green] CycloneDX SBOM: [cyan]{_cdx_path}[/cyan]")
+            except Exception as e:
+                console.print(f"  [red]✗[/red] CycloneDX export failed: {e}")
+            console.print()
+
         # ═══════════════════════════════════════════════
         # BloodHound single-host export
         # ═══════════════════════════════════════════════
