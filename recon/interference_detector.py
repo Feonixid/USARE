@@ -27,7 +27,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Optional, Deque
+from typing import Any, List, Dict, Optional, Deque
 
 logger = logging.getLogger("usare.interference_detector")
 
@@ -282,6 +282,37 @@ class InterferenceDetector:
 
         return events
 
+    def classify_inline_appliance(self, obs: Optional[List[ProbeObservation]] = None) -> Optional[Dict[str, Any]]:
+        """
+        Classify intermediate security appliances (Snort/Suricata, FortiGate, WAF)
+        based on response timing and signature behaviors.
+        """
+        observations = obs or list(self._window)
+        if not observations:
+            return None
+
+        fast_rsts = [o for o in observations if o.response_type == "rst" and o.latency_ms < 1.5]
+        http_blocks = [o for o in observations if o.response_type in ("http_403", "http_401", "http_block")]
+
+        # Snort / Suricata inline RST injection
+        if len(fast_rsts) >= 3:
+            return {
+                "appliance": "Snort / Suricata IPS (Inline)",
+                "confidence": 0.85,
+                "evidence": f"{len(fast_rsts)} sub-millisecond RST packets (< 1.5ms) detected",
+                "recommended_evasion": "Use fragmented TCP packets or multi-path dispersion to bypass inline inspection",
+            }
+        # FortiGate / Web Application Firewall
+        if len(http_blocks) >= 2:
+            return {
+                "appliance": "FortiGate / Next-Gen WAF",
+                "confidence": 0.80,
+                "evidence": f"{len(http_blocks)} HTTP block codes returned on probe ports",
+                "recommended_evasion": "Use HTTPS protocol tunneling with JA3 rotation",
+            }
+
+        return None
+
     # ── recommended escalation ────────────────────────────────────────────
 
     def get_recommended_profile(self) -> Optional[str]:
@@ -311,4 +342,5 @@ class InterferenceDetector:
             "active_events": [e.to_dict() for e in self._events],
             "being_interfered": self.is_being_interfered(),
             "recommended_profile": self.get_recommended_profile(),
+            "inferred_appliance": self.classify_inline_appliance(),
         }

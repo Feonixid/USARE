@@ -198,6 +198,60 @@ class OSFingerprintEngine:
             for s, e in scored[:top_n]
         ]
 
+    def fingerprint_from_tcp_options(
+        self,
+        options_list: List[Any],
+        observed_ttl: int = 64,
+        observed_window: int = 64240,
+    ) -> Dict[str, Any]:
+        """
+        Extract structured TCP options (MSS, WScale, SACKOK, Timestamps, NOP padding)
+        and match against known TCP stack characteristics to classify OS through firewalls.
+        """
+        parsed_opts: Dict[str, Any] = {}
+        opt_names: List[str] = []
+        for item in options_list:
+            if isinstance(item, tuple):
+                name, val = item
+                opt_names.append(str(name))
+                parsed_opts[str(name)] = val
+            elif isinstance(item, str):
+                opt_names.append(item)
+                parsed_opts[item] = True
+
+        mss = parsed_opts.get("MSS") or parsed_opts.get("mss")
+        wscale = parsed_opts.get("WScale") or parsed_opts.get("wscale")
+        has_sack = "SAckOK" in parsed_opts or "sackok" in parsed_opts or "SAck" in parsed_opts
+        has_ts = "Timestamp" in parsed_opts or "timestamp" in parsed_opts
+
+        os_candidates: List[Dict[str, Any]] = []
+        if wscale == 8 and observed_ttl > 64:
+            os_candidates.append({"os": "Windows 10/11 / Windows Server", "confidence": 0.85})
+        elif wscale in (7, 8, 9) and observed_ttl <= 64 and has_ts:
+            os_candidates.append({"os": "Linux Kernel 5.x / 6.x", "confidence": 0.88})
+        elif wscale == 6 and observed_ttl <= 64:
+            os_candidates.append({"os": "macOS / iOS / Darwin", "confidence": 0.80})
+        elif observed_ttl <= 64:
+            os_candidates.append({"os": "Linux/Unix Generic", "confidence": 0.70})
+        elif observed_ttl <= 128:
+            os_candidates.append({"os": "Windows Generic", "confidence": 0.70})
+        else:
+            os_candidates.append({"os": "Cisco IOS / Network Appliance", "confidence": 0.65})
+
+        best = os_candidates[0]
+        return {
+            "parsed_options": parsed_opts,
+            "option_sequence": opt_names,
+            "mss": mss,
+            "wscale": wscale,
+            "has_sack": has_sack,
+            "has_timestamps": has_ts,
+            "best_match": best["os"],
+            "confidence": best["confidence"],
+            "candidates": os_candidates,
+        }
+
+
     def fingerprint_from_multiple_responses(
         self,
         responses: List[Dict[str, Any]],
