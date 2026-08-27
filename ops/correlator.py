@@ -61,6 +61,8 @@ class CorrelationResult:
     service_clusters: List[ServiceCluster] = field(default_factory=list)
     signals_used: int = 0
     anomalies: List[str] = field(default_factory=list)
+    mitre_attack: List[Dict[str, Any]] = field(default_factory=list)
+    remediations: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict:
         return {
@@ -74,6 +76,8 @@ class CorrelationResult:
                                  for c in self.service_clusters],
             "signals_used": self.signals_used,
             "anomalies": self.anomalies,
+            "mitre_attack": self.mitre_attack,
+            "remediations": self.remediations,
         }
 
 
@@ -110,11 +114,23 @@ class IntelCorrelator:
         self._correlate_services(all_data)
         self._detect_anomalies(all_data)
 
+        # Correlate MITRE ATT&CK Techniques and defensive remediations
+        try:
+            from recon.vuln_mapping import map_mitre_attack_techniques
+            banners = all_data.get("banners") or {}
+            vulns = all_data.get("vulnerabilities") or {}
+            attack_data = map_mitre_attack_techniques(banners, vulns)
+            self.result.mitre_attack = attack_data.get("mitre_techniques", [])
+            self.result.remediations = attack_data.get("remediations", [])
+        except Exception as _e:
+            logger.debug(f"[Correlator] MITRE ATT&CK correlation failed: {_e}")
+
         logger.info(
             f"[Correlator] Complete: OS={self.result.best_os} "
             f"({self.result.best_os_confidence:.0%}), "
             f"{self.result.signals_used} signals, "
-            f"{len(self.result.anomalies)} anomalies"
+            f"{len(self.result.anomalies)} anomalies, "
+            f"{len(self.result.mitre_attack)} MITRE ATT&CK techniques"
         )
 
         return self.result

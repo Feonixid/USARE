@@ -358,3 +358,93 @@ def fetch_epss_scores(cve_ids: List[str], timeout: float = 8.0) -> Dict[str, Dic
 
     return {c: _EPSS_CACHE[c] for c in cve_ids if c in _EPSS_CACHE}
 
+
+def map_mitre_attack_techniques(
+    banners: Dict[Any, dict],
+    vulns: Optional[Dict[Any, List[dict]]] = None,
+) -> Dict[str, Any]:
+    """
+    Map discovered network services and CVE vulnerabilities to the
+    MITRE ATT&CK Enterprise Matrix with actionable defensive remediations.
+    """
+    techniques = []
+    remediations = []
+
+    # General discovery technique
+    techniques.append({
+        "technique_id": "T1046",
+        "technique_name": "Network Service Discovery",
+        "tactic": "Discovery",
+        "reference": "https://attack.mitre.org/techniques/T1046/",
+        "description": "Adversaries may attempt to get a listing of services running on remote hosts.",
+    })
+
+    port_mapping = {
+        21: ("T1078", "Valid Accounts: Unencrypted FTP", "Initial Access", "Enforce SFTP/FTPS and disable anonymous login"),
+        22: ("T1133", "External Remote Services: SSH", "Initial Access / Persistence", "Enforce key-based authentication, disable root login, place behind VPN"),
+        23: ("T1078", "Valid Accounts: Unencrypted Telnet", "Initial Access", "Disable Telnet service completely; migrate to SSHv2"),
+        80: ("T1190", "Exploit Public-Facing Application: HTTP", "Initial Access", "Upgrade server to latest version, enable WAF, enforce HTTPS redirect"),
+        443: ("T1190", "Exploit Public-Facing Application: HTTPS", "Initial Access", "Maintain patch levels, configure strict TLS ciphers, deploy WAF"),
+        445: ("T1021.002", "Remote Services: SMB/Windows Admin Shares", "Lateral Movement", "Block SMB (port 445) at boundary firewall; disable SMBv1"),
+        139: ("T1021.002", "Remote Services: NetBIOS SMB", "Lateral Movement", "Block port 139 at network perimeter"),
+        3389: ("T1021.001", "Remote Services: Remote Desktop Protocol", "Lateral Movement / Initial Access", "Require Network Level Authentication (NLA), enforce MFA, restrict via VPN"),
+        3306: ("T1190", "Exploit Public-Facing Application: MySQL", "Initial Access", "Bind MySQL to localhost or internal subnet; disable public exposure"),
+        5432: ("T1190", "Exploit Public-Facing Application: PostgreSQL", "Initial Access", "Restrict PostgreSQL access using pg_hba.conf; bind to internal IP"),
+        6379: ("T1190", "Exploit Public-Facing Application: Redis", "Initial Access", "Enable requirepass authentication, bind to 127.0.0.1, disable dangerous commands"),
+        27017: ("T1190", "Exploit Public-Facing Application: MongoDB", "Initial Access", "Enable auth and TLS; restrict network access via firewall"),
+    }
+
+    seen_techs = {"T1046"}
+
+    for p_key, b_info in banners.items():
+        try:
+            port = int(p_key)
+        except (ValueError, TypeError):
+            continue
+
+        if port in port_mapping:
+            tid, tname, tactic, rem = port_mapping[port]
+            if tid not in seen_techs:
+                seen_techs.add(tid)
+                techniques.append({
+                    "technique_id": tid,
+                    "technique_name": tname,
+                    "tactic": tactic,
+                    "reference": f"https://attack.mitre.org/techniques/{tid.split('.')[0]}/",
+                    "port": port,
+                })
+            remediations.append({
+                "port": port,
+                "service": b_info.get("service") or b_info.get("name") or str(port),
+                "remediation": rem,
+                "priority": "HIGH" if port in (445, 3389, 23, 6379) else "MEDIUM",
+            })
+
+    # CVE vulnerability attack mappings
+    if vulns:
+        for p_str, cve_list in vulns.items():
+            for cve in cve_list:
+                score = float(cve.get("cvss_score", 0.0) or 0.0)
+                cid = cve.get("cve_id", "")
+                if score >= 7.0:
+                    if "T1190" not in seen_techs:
+                        seen_techs.add("T1190")
+                        techniques.append({
+                            "technique_id": "T1190",
+                            "technique_name": "Exploit Public-Facing Application",
+                            "tactic": "Initial Access",
+                            "reference": "https://attack.mitre.org/techniques/T1190/",
+                        })
+                    remediations.append({
+                        "port": p_str,
+                        "cve_id": cid,
+                        "remediation": f"Apply vendor patch for {cid} (CVSS {score}) immediately.",
+                        "priority": "CRITICAL" if score >= 9.0 or cve.get("is_cisa_kev") else "HIGH",
+                    })
+
+    return {
+        "mitre_techniques": techniques,
+        "remediations": remediations,
+        "total_techniques_mapped": len(techniques),
+    }
+

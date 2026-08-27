@@ -659,12 +659,27 @@ class StealthScanner:
                 send(rst, verbose=0)
                 self.heat_meter.record_packet()
                 self.session.record_send()
+
+                srv_guess = SERVICE_MAP.get(port)
+                srv_banner = None
+                if getattr(self.config, "service_detect", False):
+                    try:
+                        from recon.service_detect import ServiceDetector
+                        detector = ServiceDetector(timeout=min(self.config.timeout, 4.0))
+                        sinfo = detector.detect_service(self.config.target_ip, port)
+                        if sinfo:
+                            srv_guess = sinfo.product or sinfo.service or srv_guess
+                            srv_banner = sinfo.raw_response or sinfo.version
+                    except Exception as _e:
+                        logger.debug(f"[scanner] service detection error on {port}: {_e}")
+
                 return ScanResult(
                     port=port, state=PortState.OPEN, reason="syn-ack",
                     ttl_received=resp[IP].ttl,
                     window_received=resp[TCP].window,
                     latency_ms=latency,
-                    service_guess=SERVICE_MAP.get(port),
+                    service_guess=srv_guess,
+                    banner=srv_banner,
                     scan_method="syn",
                     raw_flags=str(tcp_flags),
                     confidence=0.95,  
@@ -959,6 +974,39 @@ class StealthScanner:
         return ports
     def get_response_data(self) -> List[Dict]:
         return self._response_data
+
+    def get_os_fingerprint(self) -> Dict[str, Any]:
+        """
+        Analyze accumulated packet response data across all probes
+        (initial TTL, window size, DF flag, IPID sequence) to produce
+        a high-confidence OS fingerprint through firewalls.
+        """
+        if not self._response_data:
+            return {"os_name": "Unknown", "confidence": 0.0, "evidence": ["No response packets received"]}
+
+        try:
+            from recon.os_fingerprint import OSFingerprintEngine
+            engine = OSFingerprintEngine()
+
+            ttls = [d["ttl"] for d in self._response_data if "ttl" in d]
+            windows = [d["window"] for d in self._response_data if "window" in d]
+            dfs = [d["df"] for d in self._response_data if "df" in d]
+            ip_ids = [d["ip_id"] for d in self._response_data if "ip_id" in d]
+
+            avg_ttl = int(sum(ttls) / len(ttls)) if ttls else 64
+            common_window = max(set(windows), key=windows.count) if windows else 64240
+            common_df = max(set(dfs), key=dfs.count) if dfs else True
+
+            fp = engine.fingerprint_from_response(
+                ttl=avg_ttl,
+                window=common_window,
+                df=common_df,
+                ip_id=ip_ids[0] if ip_ids else None,
+            )
+            return fp.to_dict()
+        except Exception as _e:
+            logger.debug(f"[scanner] OS fingerprint error: {_e}")
+            return {"os_name": "Unknown", "confidence": 0.0, "evidence": [str(_e)]}
     def get_summary(self) -> Dict[str, Any]:
         open_ports = [r for r in self.results if r.state == PortState.OPEN]
         closed_ports = [r for r in self.results if r.state == PortState.CLOSED]
