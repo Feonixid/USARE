@@ -1,0 +1,66 @@
+{
+    "windows": {
+        "10": {
+            "ttl": 128,
+            "window_size": 64240,
+            "df_flag": true,
+            "tcp_options": ["mss", "nop", "wscale", "nop", "nop", "timestamp", "sackok", "eol"]
+        },
+        "server_2019": {
+            "ttl": 128,
+            "window_size": 8192,
+            "df_flag": true,
+            "tcp_options": ["mss", "nop", "wscale", "sackok", "timestamp", "nop", "nop"]
+        },
+        "7": {
+            "ttl": 128,
+            "window_size": 8192,
+            "df_flag": true,
+            "tcp_options": ["mss", "nop", "wscale", "nop", "nop", "timestamp", "sackok", "eol"]
+        }
+    },
+    "linux": {
+        "kernel_5_x": {
+            "ttl": 64,
+            "window_size": 64240,
+            "df_flag": true,
+            "tcp_options": ["mss", "sackok", "timestamp", "nop", "wscale"]
+        },
+        "kernel_3_x": {
+            "ttl": 64,
+            "window_size": 29200,
+            "df_flag": true,
+            "tcp_options": ["mss", "sackok", "timestamp", "nop", "wscale"]
+        },
+        "kernel_2_6": {
+            "ttl": 64,
+            "window_size": 5840,
+            "df_flag": true,
+            "tcp_options": ["mss", "sackok", "timestamp", "nop", "wscale"]
+        }
+    },
+    "freebsd": {
+        "12_x": {
+            "ttl": 64,
+            "window_size": 65535,
+            "df_flag": true,
+            "tcp_options": ["mss", "nop", "wscale", "sackok", "timestamp"]
+        }
+    },
+    "macos": {
+        "catalina": {
+            "ttl": 64,
+            "window_size": 65535,
+            "df_flag": true,
+            "tcp_options": ["mss", "nop", "wscale", "nop", "nop", "timestamp", "sackok", "eol"]
+        }
+    },
+    "cisco": {
+        "ios_15": {
+            "ttl": 255,
+            "window_size": 4128,
+            "df_flag": false,
+            "tcp_options": ["mss", "sackok", "timestamp", "nop", "wscale"]
+        }
+    }
+}

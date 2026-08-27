@@ -1,0 +1,14 @@
+{
+  "source_directories": [
+    "."
+  ],
+  "search_path": [
+    ".venv/Lib/site-packages",
+    ".venv/lib/python3.11/site-packages",
+    ".venv/lib/python3.10/site-packages"
+  ],
+  "exclude": [
+    ".venv/.*"
+  ],
+  "site_package_search_strategy": "all"
+}

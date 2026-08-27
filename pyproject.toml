@@ -1,0 +1,106 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "usare"
+version = "2.1.0"
+description = "Ultra-Stealth Adaptive Reconnaissance Engine — zero-footprint network recon for authorized security testing."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+keywords = ["security", "reconnaissance", "penetration-testing", "stealth", "network-scanner"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: System :: Networking",
+]
+
+dependencies = [
+    "scapy>=2.5.0",
+    "rich>=13.0.0",
+    "cryptography>=41.0.0",
+    "requests>=2.31.0",
+    "PySocks>=1.7.1",
+    "dnspython>=2.4.0",
+    "psutil>=5.9.0",
+    "colorama>=0.4.5",
+    "pyyaml>=6.0",
+    "jinja2>=3.1.0",
+    "certifi>=2022.12.7",
+]
+
+[project.optional-dependencies]
+# ML-powered evasion (timing models, AI analyst)
+ml = [
+    "scikit-learn>=1.3.0",
+    "numpy>=1.24.0",
+]
+# Protocol tunneling (QUIC, HTTP/2)
+tunnel = [
+    "aioquic>=0.9.20",
+    "aiohttp>=3.8.0",
+    "hpack>=4.0.0",
+]
+# SSH/service probing
+ssh = [
+    "paramiko>=3.1.0",
+]
+# OSINT integrations
+osint = [
+    "shodan>=1.30.0",
+    "python-whois>=0.8.0",
+]
+# Web UI (graph visualizer)
+ui = [
+    "flask>=3.0.0",
+]
+# Everything
+full = [
+    "usare[ml,tunnel,ssh,osint,ui]",
+]
+# Development
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+]
+
+[project.scripts]
+usare = "core.entry:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/usare"
+Documentation = "https://github.com/yourusername/usare#readme"
+Issues = "https://github.com/yourusername/usare/issues"
+
+[tool.setuptools.packages.find]
+include = ["core*", "evasion*", "recon*", "ops*", "scripts*", "data*"]
+
+[tool.setuptools.package-data]
+data = ["*.json", "nmap-service-probes"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.black]
+line-length = 120
+target-version = ["py310"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true

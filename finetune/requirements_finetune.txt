@@ -1,0 +1,31 @@
+# USARE Fine-Tuning Dependencies
+# Install on Lightning AI before running finetune_qwen_cybersec.py
+#
+# Recommended Lightning AI setup:
+#   - Machine: A10G (24GB VRAM) or A100 (40/80GB)
+#   - Storage: 100GB+ (model weights + dataset + GGUF output)
+#   - Python: 3.10+
+
+# Core fine-tuning stack
+unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
+trl>=0.8.6
+transformers>=4.40.0
+peft>=0.10.0
+accelerate>=0.29.0
+bitsandbytes>=0.43.0
+
+# Dataset handling
+datasets>=2.18.0
+
+# Training utilities
+torch>=2.2.0
+sentencepiece
+protobuf
+
+# Optional: experiment tracking
+# wandb
+
+# Kaggle inference server
+flask>=3.0.0
+llama-cpp-python>=0.2.56
+pyngrok>=7.0.0
