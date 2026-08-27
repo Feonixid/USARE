@@ -156,6 +156,8 @@ class BannerGrabber:
         return self.grab(target_ip, port)
     def _tls_grab(self, target_ip: str, port: int, browser: Optional[str] = None) -> Optional[BannerResult]:
         result = BannerResult(port=port)
+        sock = None
+        ssock = None
         try:
             ctx = self._create_rotating_ssl_context(browser)
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -183,32 +185,25 @@ class BannerGrabber:
                     result.http_server = http_result.get("server")
                     result.http_headers = http_result
                     result.service = "https"
-            try:
-                ssock.shutdown(socket.SHUT_RDWR)
-            except Exception:
-                pass
-            ssock.close()
             return result
         except ssl.SSLError as e:
             logger.debug(f"[USARE] TLS failed on {target_ip}:{port}: {e}")
-            try:
-                if 'sock' in locals():
-                    sock.close()
-                if 'ssock' in locals():
-                    ssock.close()
-            except Exception:
-                pass
             return None
         except (socket.timeout, ConnectionRefusedError, OSError) as e:
             logger.debug(f"[USARE] Connection failed to {target_ip}:{port}: {e}")
-            try:
-                if 'sock' in locals():
-                    sock.close()
-                if 'ssock' in locals():
-                    ssock.close()
-            except Exception:
-                pass
             return None
+        finally:
+            # Graceful teardown — prevents IDS half-open connection alerts
+            for s in (ssock, sock):
+                if s is not None:
+                    try:
+                        s.shutdown(socket.SHUT_RDWR)
+                    except Exception:
+                        pass
+                    try:
+                        s.close()
+                    except Exception:
+                        pass
     def _create_rotating_ssl_context(self, browser: Optional[str] = None) -> ssl.SSLContext:
         """Create SSL context with JA3 fingerprint rotation."""
         try:
@@ -378,6 +373,7 @@ class BannerGrabber:
     def _plaintext_grab(self, target_ip: str, port: int) -> BannerResult:
         result = BannerResult(port=port)
         probe_info = PROTOCOL_PROBES.get(port, {})
+        sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.connect_timeout)
@@ -409,13 +405,19 @@ class BannerGrabber:
                     if match:
                         if not result.version:
                             result.version = match.group(1)
-            try:
-                sock.shutdown(socket.SHUT_RDWR)
-            except Exception:
-                pass
-            sock.close()
         except (socket.timeout, ConnectionRefusedError, OSError) as e:
             logger.debug(f"[USARE] Plaintext grab failed for {target_ip}:{port}: {e}")
+        finally:
+            # Graceful teardown — prevents IDS half-open connection alerts
+            if sock is not None:
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except Exception:
+                    pass
+                try:
+                    sock.close()
+                except Exception:
+                    pass
         return result
     @staticmethod
     def _guess_os_from_ssh(banner: str) -> Optional[str]:

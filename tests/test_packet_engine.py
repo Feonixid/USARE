@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from core.packet_engine import (
     PacketEngine, PacketConfig, IPIDGenerator, TCPSeqGenerator,
     WIN10_BUILD_19045_TTL, WIN10_BUILD_19045_WINDOW, WIN10_BUILD_19045_WSCALE,
@@ -136,3 +136,11 @@ class TestPacketEngine:
         pkt = self.engine.craft_icmp_echo("127.0.0.1")
         assert pkt[IP].ttl == WIN10_BUILD_19045_TTL
         assert pkt[IP].dst == "127.0.0.1"
+
+    def test_rst_blocker_context_manager(self):
+        from ops.rst_blocker import RSTBlocker
+        blocker = RSTBlocker("192.168.1.100")
+        assert blocker.target_ip == "192.168.1.100"
+        with blocker as b:
+            pass
+        assert blocker.active is False

@@ -39,6 +39,7 @@ from evasion.flow_morph import FlowShaper, BrowserFlowMorpher, FlowType  # type:
 from evasion.proto_tunnel import HTTPSTunnel, DNSTunnel  # type: ignore
 from evasion.distributed import DistributedCoordinator  # type: ignore
 from evasion.baseline_poison import BaselinePoisoner, PoisonConfig  # type: ignore
+from evasion.multi_path_dispersion import load_proxy_config, get_dispersion_stats  # type: ignore
 
 # ── Recon modules ─────────────────────────────────────────────────────────────
 from recon.syn_scanner import StealthScanner, ScanConfig, PortState  # type: ignore
@@ -353,6 +354,11 @@ def main():
     start_time = time.time()
     def sigint_handler(sig, frame):
         console.print("\n[yellow]⚠️  Interrupted — saving partial results...[/yellow]")
+        try:
+            if 'strategy_controller' in locals() and strategy_controller:
+                strategy_controller.stop()
+        except Exception:
+            pass
         if args.ebpf and ebpf_engine:
             ebpf_engine.detach()
         _save(all_data, password, args)
@@ -871,6 +877,13 @@ def main():
                 traceroute_hops=trace_result.firewall_position if 'trace_result' in locals() and trace_result.firewall_position else None,
                 slow_corridor_seconds=float(getattr(args, "slow_corridor", 0.0) or 0.0),
                 micro_jitter_ms=float(getattr(args, "micro_jitter_ms", 0.0) or 0.0),
+                use_contextual_probe=bool(getattr(args, "contextual_probe", False)),
+                contextual_os_hint=getattr(args, "contextual_os_hint", None),
+                use_ttl_masquerading=bool(getattr(args, "ttl_masquerade", None)),
+                ttl_strategy=getattr(args, "ttl_masquerade", "adaptive") or "adaptive",
+                use_multi_path=bool(getattr(args, "multi_path", None)),
+                multi_path_config=getattr(args, "multi_path", None),
+                service_detect=bool(getattr(args, "service_detect", False)),
             )
             scanner = StealthScanner(
                 scan_config,
@@ -3527,6 +3540,30 @@ def main():
                 console.print(f"  [green]✓[/green] Metasploit XML: [cyan]{_msf_path}[/cyan]")
             except Exception as e:
                 console.print(f"  [red]✗[/red] Metasploit export failed: {e}")
+            console.print()
+
+        if getattr(args, "sarif_export", False):
+            console.print("[bold cyan]🛡️  OASIS SARIF 2.1.0 Export[/bold cyan]")
+            try:
+                from ops.export_formats import export_sarif  # type: ignore
+                _sarif_target = getattr(args, "target", "scan")
+                _sarif_fn = os.path.join(_exp_dir, f"usare_{_sarif_target.replace('.', '_')}.sarif")
+                _sarif_path = export_sarif(save_data, filename=_sarif_fn)
+                console.print(f"  [green]✓[/green] SARIF Report: [cyan]{_sarif_path}[/cyan]")
+            except Exception as e:
+                console.print(f"  [red]✗[/red] SARIF export failed: {e}")
+            console.print()
+
+        if getattr(args, "stix_export", False):
+            console.print("[bold cyan]🌐 OASIS STIX 2.1 Threat Bundle Export[/bold cyan]")
+            try:
+                from ops.export_formats import export_stix  # type: ignore
+                _stix_target = getattr(args, "target", "scan")
+                _stix_fn = os.path.join(_exp_dir, f"usare_{_stix_target.replace('.', '_')}.stix.json")
+                _stix_path = export_stix(save_data, filename=_stix_fn)
+                console.print(f"  [green]✓[/green] STIX Bundle: [cyan]{_stix_path}[/cyan]")
+            except Exception as e:
+                console.print(f"  [red]✗[/red] STIX export failed: {e}")
             console.print()
 
         # ═══════════════════════════════════════════════

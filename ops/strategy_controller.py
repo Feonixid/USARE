@@ -133,7 +133,7 @@ class StrategyController:
     def start(self):
         """Start the background monitoring thread."""
         if self._running:
-            return
+            return self
         self._running = True
         self._thread = threading.Thread(
             target=self._monitor_loop,
@@ -142,13 +142,25 @@ class StrategyController:
         )
         self._thread.start()
         logger.info("[Strategy] Controller started — monitoring heat meter")
+        return self
 
     def stop(self):
         """Stop the monitoring thread."""
         self._running = False
-        if self._thread is not None:
-            self._thread.join(timeout=5.0)
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
         logger.info("[Strategy] Controller stopped")
+
+    def close(self):
+        """Alias for stop() to provide clean resource lifecycle."""
+        self.stop()
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
 
     def _monitor_loop(self):
         """Background loop polling heat meter and adjusting strategy."""

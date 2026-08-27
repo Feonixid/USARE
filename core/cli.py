@@ -297,6 +297,9 @@ def parse_args():
     # Newly Integrated Advanced Run-Time Techniques (Recon & Evasion)
     adv.add_argument("--contextual-probe", action="store_true",
                      help="Use OS-specific contextual probes (LLMNR, mDNS, UPnP) before SYN scanning")
+    adv.add_argument("--contextual-os-hint", choices=["windows", "apple", "linux", "iot", "enterprise"],
+                     default=None,
+                     help="Target OS family hint for contextual probing workflow")
     adv.add_argument("--entropy-balance", choices=["chrome_tls", "firefox_tls", "http_traffic", "dns_query"],
                      help="Balance payload entropy; with --flow-morph, shapes cover-traffic payloads; still runs post-scan analysis")
     adv.add_argument("--ja3-rotation", choices=["chrome", "firefox", "safari", "edge"],
@@ -443,6 +446,10 @@ def parse_args():
                      help="Export results as Nessus .nessus XML (importable into Tenable/Nessus)")
     adv.add_argument("--msf-export", action="store_true",
                      help="Export results as Metasploit db_import XML")
+    adv.add_argument("--sarif-export", action="store_true",
+                     help="Export results as OASIS SARIF 2.1.0 JSON format (GitHub Security / SIEM)")
+    adv.add_argument("--stix-export", action="store_true",
+                     help="Export results as OASIS STIX 2.1 JSON bundle (OpenCTI / MISP / Threat Intel)")
 
     # ── OPEN_FILTERED second-pass ─────────────────────────────────────────────
     adv.add_argument("--verify-filtered", action="store_true",

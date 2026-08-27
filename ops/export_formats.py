@@ -329,3 +329,169 @@ def verify_open_filtered(
         except Exception:
             results[port] = "filtered"
     return results
+
+
+def export_sarif(
+    all_data: Dict[str, Any],
+    filename: str = "logs/usare_report.sarif",
+) -> str:
+    """
+    Export USARE scan results to OASIS SARIF 2.1.0 JSON format for
+    standardized SIEM, GitHub Security, and CI/CD ingestion.
+    """
+    import json
+    os.makedirs(os.path.dirname(filename) or ".", exist_ok=True)
+    target = all_data.get("target") or all_data.get("target_ip") or "127.0.0.1"
+
+    results_list = []
+    rules_dict = {}
+
+    # Open ports findings
+    open_ports = all_data.get("open_ports", []) or []
+    for p in open_ports:
+        rule_id = f"USARE-PORT-{p}"
+        if rule_id not in rules_dict:
+            rules_dict[rule_id] = {
+                "id": rule_id,
+                "name": "OpenPortExposed",
+                "shortDescription": {"text": f"Exposed open port {p}"},
+                "defaultConfiguration": {"level": "note"}
+            }
+        results_list.append({
+            "ruleId": rule_id,
+            "level": "note",
+            "message": {"text": f"Open port {p} detected on target {target}."},
+            "locations": [{
+                "physicalLocation": {
+                    "artifactLocation": {"uri": f"net://{target}:{p}"}
+                }
+            }]
+        })
+
+    # CVE findings
+    vulns = all_data.get("vulnerabilities", {}) or {}
+    for port_str, cve_list in vulns.items():
+        for cve in cve_list:
+            cve_id = cve.get("cve_id", "CVE-UNKNOWN")
+            score = float(cve.get("cvss_score", 0.0) or 0.0)
+            level = "error" if score >= 7.0 else "warning" if score >= 4.0 else "note"
+            if cve_id not in rules_dict:
+                rules_dict[cve_id] = {
+                    "id": cve_id,
+                    "name": "VulnerabilityFinding",
+                    "shortDescription": {"text": cve.get("description", "")[:200] or cve_id},
+                    "defaultConfiguration": {"level": level}
+                }
+            results_list.append({
+                "ruleId": cve_id,
+                "level": level,
+                "message": {"text": f"{cve_id} (CVSS {score}): {cve.get('description', '')[:300]}"},
+                "locations": [{
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": f"net://{target}:{port_str}"}
+                    }
+                }]
+            })
+
+    sarif_doc = {
+        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name": "USARE",
+                    "version": "2.1.0",
+                    "informationUri": "https://github.com/Feonixid/USARE",
+                    "rules": list(rules_dict.values())
+                }
+            },
+            "results": results_list
+        }]
+    }
+
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(sarif_doc, f, indent=2)
+    logger.info("[export] SARIF 2.1.0 written: %s", filename)
+    return filename
+
+
+def export_stix(
+    all_data: Dict[str, Any],
+    filename: str = "logs/usare_report.stix.json",
+) -> str:
+    """
+    Export USARE scan results to OASIS STIX 2.1 JSON bundle format for
+    threat intelligence platforms (OpenCTI, MISP, SIEM).
+    """
+    import json
+    import uuid
+    os.makedirs(os.path.dirname(filename) or ".", exist_ok=True)
+    target = all_data.get("target") or all_data.get("target_ip") or "127.0.0.1"
+    now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    identity_id = f"identity--{uuid.uuid5(uuid.NAMESPACE_DNS, 'usare.engine')}"
+    infra_id = f"infrastructure--{uuid.uuid5(uuid.NAMESPACE_DNS, f'usare.infra.{target}')}"
+    ip_id = f"ipv4-addr--{uuid.uuid5(uuid.NAMESPACE_DNS, f'usare.ip.{target}')}"
+
+    objects: List[Dict[str, Any]] = [
+        {
+            "type": "identity",
+            "spec_version": "2.1",
+            "id": identity_id,
+            "created": now_str,
+            "modified": now_str,
+            "name": "USARE Recon Engine",
+            "identity_class": "system",
+        },
+        {
+            "type": "infrastructure",
+            "spec_version": "2.1",
+            "id": infra_id,
+            "created": now_str,
+            "modified": now_str,
+            "name": f"Target Host {target}",
+            "description": f"Network infrastructure evaluated by USARE at {target}",
+            "infrastructure_types": ["endpoint"],
+        },
+        {
+            "type": "ipv4-addr",
+            "spec_version": "2.1",
+            "id": ip_id,
+            "value": target if not target.replace(".", "").isdigit() is False else "127.0.0.1",
+        }
+    ]
+
+    # Add observed vulnerabilities
+    vulns = all_data.get("vulnerabilities", {}) or {}
+    for port_str, cve_list in vulns.items():
+        for cve in cve_list:
+            cve_id = cve.get("cve_id", "")
+            if cve_id:
+                vuln_stix_id = f"vulnerability--{uuid.uuid5(uuid.NAMESPACE_DNS, cve_id)}"
+                objects.append({
+                    "type": "vulnerability",
+                    "spec_version": "2.1",
+                    "id": vuln_stix_id,
+                    "created": now_str,
+                    "modified": now_str,
+                    "name": cve_id,
+                    "description": cve.get("description", ""),
+                    "external_references": [
+                        {
+                            "source_name": "cve",
+                            "external_id": cve_id,
+                            "url": f"https://nvd.nist.gov/vuln/detail/{cve_id}"
+                        }
+                    ]
+                })
+
+    bundle = {
+        "type": "bundle",
+        "id": f"bundle--{uuid.uuid4()}",
+        "objects": objects,
+    }
+
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(bundle, f, indent=2)
+    logger.info("[export] STIX 2.1 bundle written: %s", filename)
+    return filename

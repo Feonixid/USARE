@@ -195,4 +195,100 @@ def probe_http_security(
             out["fronting_analysis"] = analyze_fronting_hints(out["headers"])
         except ImportError:
             pass
+        out["security_grade"] = grade_http_security_headers(out["headers"])
     return out
+
+
+def grade_http_security_headers(headers: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Evaluate HTTP security headers against OWASP guidelines and return
+    a compliance score (0-100), letter grade (A+ through F), and specific findings.
+    """
+    normalized = {k.lower(): v for k, v in headers.items()}
+    score = 0
+    max_score = 100
+    missing = []
+    present = []
+    warnings = []
+
+    # 1. HSTS (20 pts)
+    hsts = normalized.get("strict-transport-security")
+    if hsts:
+        score += 20
+        present.append("Strict-Transport-Security")
+        if "preload" in hsts.lower():
+            score += 5
+    else:
+        missing.append("Strict-Transport-Security (HSTS)")
+
+    # 2. CSP (25 pts)
+    csp = normalized.get("content-security-policy")
+    if csp:
+        score += 25
+        present.append("Content-Security-Policy")
+    else:
+        missing.append("Content-Security-Policy (CSP)")
+
+    # 3. X-Frame-Options (15 pts)
+    xfo = normalized.get("x-frame-options")
+    if xfo:
+        score += 15
+        present.append("X-Frame-Options")
+    else:
+        missing.append("X-Frame-Options (Clickjacking defense)")
+
+    # 4. X-Content-Type-Options (15 pts)
+    xcto = normalized.get("x-content-type-options")
+    if xcto and "nosniff" in xcto.lower():
+        score += 15
+        present.append("X-Content-Type-Options")
+    else:
+        missing.append("X-Content-Type-Options: nosniff (MIME sniffing defense)")
+
+    # 5. Referrer-Policy (15 pts)
+    ref = normalized.get("referrer-policy")
+    if ref:
+        score += 15
+        present.append("Referrer-Policy")
+    else:
+        missing.append("Referrer-Policy")
+
+    # 6. Permissions-Policy (10 pts)
+    perm = normalized.get("permissions-policy")
+    if perm:
+        score += 10
+        present.append("Permissions-Policy")
+    else:
+        missing.append("Permissions-Policy (Browser feature restrictions)")
+
+    # Information leakage penalties
+    if "x-powered-by" in normalized:
+        score = max(0, score - 10)
+        warnings.append(f"Information disclosure: X-Powered-By header revealed ({normalized['x-powered-by']})")
+    if "server" in normalized and any(c.isdigit() for c in normalized["server"]):
+        score = max(0, score - 5)
+        warnings.append(f"Server header exposes exact software version ({normalized['server']})")
+
+    # Clamp score to 0..100
+    score = min(100, max(0, score))
+
+    if score >= 95:
+        grade = "A+"
+    elif score >= 85:
+        grade = "A"
+    elif score >= 70:
+        grade = "B"
+    elif score >= 50:
+        grade = "C"
+    elif score >= 30:
+        grade = "D"
+    else:
+        grade = "F"
+
+    return {
+        "score": score,
+        "grade": grade,
+        "present_headers": present,
+        "missing_headers": missing,
+        "warnings": warnings,
+    }

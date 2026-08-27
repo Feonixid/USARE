@@ -394,6 +394,13 @@ class StealthScanner:
                     if _progress_ctx and _task_id is not None:
                         heat_str = self.heat_meter.heat_level
                         _progress_ctx.update(_task_id, advance=1, heat=heat_str)
+                    if self.strategy_controller and getattr(self.strategy_controller, "is_paused", False):
+                        logger.warning("[USARE] StrategyController active cooldown in progress. Pausing scan loop...")
+                        while getattr(self.strategy_controller, "is_paused", False):
+                            time.sleep(2)
+                    elif self.heat_meter and self.heat_meter.detection_probability() >= 0.80:
+                        logger.critical("[USARE] Detection heat >= 80%. Initiating automatic defensive cooldown...")
+                        time.sleep(min(60.0, max(10.0, self.timer.sync_ghost_wait())))
                     if self.config.ghost_mode:
                         base_delay = self.timer.sync_ghost_wait()
                         multiplier = self.strategy_controller.get_timing_multiplier() if self.strategy_controller else 1.0
