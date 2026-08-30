@@ -4,7 +4,7 @@ USARE is a specialized network reconnaissance and diagnostics engine engineered 
 
 ---
 
-## 🏛️ Architecture & Component Overview
+## Architecture & Component Overview
 
 USARE is organized into four modular layers:
 
@@ -53,7 +53,7 @@ USARE is organized into four modular layers:
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -118,7 +118,7 @@ python usare.py -t 192.168.1.100 --full \
 
 ---
 
-## 📊 Standards & Export Formats
+## Standards & Export Formats
 
 USARE natively exports structured diagnostic and audit intelligence into industry-standard formats:
 
@@ -132,7 +132,7 @@ USARE natively exports structured diagnostic and audit intelligence into industr
 
 ---
 
-## 🧪 Testing
+## Testing
 
 USARE includes a comprehensive pytest suite with 109 automated tests covering raw packet crafting, timing jitter, strategy control, eBPF/firewall RST suppression, EPSS scoring, DNSSEC audits, and SBOM validation:
 
