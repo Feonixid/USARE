@@ -145,4 +145,4 @@ pytest
 
 ## ⚖️ Legal Disclaimer
 
-USARE is designed exclusively for authorized security diagnostics, auditing, and defensive verification. Users are solely responsible for ensuring compliance with applicable laws and obtaining explicit written permission before scanning any target network or infrastructure.
+USARE is a personal research tool with no license to be used purely experimental.
