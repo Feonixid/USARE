@@ -7,7 +7,7 @@ name = "usare"
 version = "2.1.0"
 description = "Ultra-Stealth Adaptive Reconnaissance Engine — zero-footprint network recon for authorized security testing."
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "No license"}
 requires-python = ">=3.10"
 keywords = ["security", "reconnaissance", "penetration-testing", "stealth", "network-scanner"]
 classifiers = [
